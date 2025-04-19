@@ -1,21 +1,17 @@
-// Import Firebase
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, where, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-
-// Firebase configuration (gunakan environment variables di Vercel)
+// Firebase configuration (hardcoded untuk simpel, nanti pindah ke Vercel env vars)
 const firebaseConfig = {
-    apiKey: process.env.FIREBASE_API_KEY || "AIzaSyAdNJcuwTKjcAP4o-kv7bPOUvD6-FoDQhs",
-    authDomain: process.env.FIREBASE_AUTH_DOMAIN || "liquidityfarm-5dfb3.firebaseapp.com",
-    projectId: process.env.FIREBASE_PROJECT_ID || "liquidityfarm-5dfb3",
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "liquidityfarm-5dfb3.firebasestorage.app",
-    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "760084956986",
-    appId: process.env.FIREBASE_APP_ID || "1:760084956986:web:fef2a289b2d83904baf203",
-    measurementId: process.env.FIREBASE_MEASUREMENT_ID || "G-Q186Q4DNRR"
+    apiKey: "AIzaSyAdNJcuwTKjcAP4o-kv7bPOUvD6-FoDQhs",
+    authDomain: "liquidityfarm-5dfb3.firebaseapp.com",
+    projectId: "liquidityfarm-5dfb3",
+    storageBucket: "liquidityfarm-5dfb3.firebasestorage.app",
+    messagingSenderId: "760084956986",
+    appId: "1:760084956986:web:fef2a289b2d83904baf203",
+    measurementId: "G-Q186Q4DNRR"
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const app = firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 // State variables
 let isAdmin = false;
@@ -51,8 +47,8 @@ window.onload = async function () {
     await displayPublicProjectsPreview();
 
     if (savedUser) {
-        const q = query(collection(db, 'users'), where('username', '==', savedUser));
-        const userSnapshot = await getDocs(q);
+        const q = db.collection('users').where('username', '==', savedUser);
+        const userSnapshot = await q.get();
         if (!userSnapshot.empty) {
             const user = userSnapshot.docs[0].data();
             currentUser = user.username;
@@ -79,7 +75,7 @@ window.onload = async function () {
 // Function to load projects from Firestore
 async function loadProjects() {
     projects = [];
-    const snapshot = await getDocs(collection(db, 'projects'));
+    const snapshot = await db.collection('projects').get();
     snapshot.forEach(doc => {
         projects.push({ id: doc.id, ...doc.data() });
     });
@@ -215,27 +211,27 @@ async function register() {
 
     try {
         // Cek apakah username sudah ada di users
-        let q = query(collection(db, 'users'), where('username', '==', username));
-        let snapshot = await getDocs(q);
+        let q = db.collection('users').where('username', '==', username);
+        let snapshot = await q.get();
         if (!snapshot.empty) {
             alert('Username already taken.');
             return;
         }
 
         // Cek apakah username sudah ada di pendingUsers
-        q = query(collection(db, 'pendingUsers'), where('username', '==', username));
-        snapshot = await getDocs(q);
+        q = db.collection('pendingUsers').where('username', '==', username);
+        snapshot = await q.get();
         if (!snapshot.empty) {
             alert('Username already taken.');
             return;
         }
 
         // Tambahkan ke pendingUsers
-        await addDoc(collection(db, 'pendingUsers'), {
+        await db.collection('pendingUsers').add({
             username,
             password,
             allowedTools: false,
-            createdAt: serverTimestamp()
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
         alert('Registration successful! Please wait for admin approval.');
@@ -257,15 +253,15 @@ async function resetPassword() {
     }
 
     try {
-        const q = query(collection(db, 'users'), where('username', '==', username));
-        const snapshot = await getDocs(q);
+        const q = db.collection('users').where('username', '==', username);
+        const snapshot = await q.get();
         if (snapshot.empty) {
             alert('Username not found.');
             return;
         }
 
         const userDoc = snapshot.docs[0];
-        await updateDoc(doc(db, 'users', userDoc.id), { password: newPassword });
+        await db.collection('users').doc(userDoc.id).update({ password: newPassword });
         alert('Password reset successfully! Please login with your new password.');
         showLogin();
     } catch (error) {
@@ -281,8 +277,8 @@ async function login() {
     const loginMessage = document.getElementById('loginMessage');
 
     try {
-        const q = query(collection(db, 'users'), where('username', '==', username), where('password', '==', password));
-        const snapshot = await getDocs(q);
+        const q = db.collection('users').where('username', '==', username).where('password', '==', password);
+        const snapshot = await q.get();
         if (!snapshot.empty) {
             const user = snapshot.docs[0].data();
             loginMessage.style.color = "lightgreen";
@@ -333,7 +329,7 @@ async function showPendingUsers() {
 
     try {
         // Ambil pendingUsers
-        const pendingSnapshot = await getDocs(collection(db, 'pendingUsers'));
+        const pendingSnapshot = await db.collection('pendingUsers').get();
         if (pendingSnapshot.empty) {
             pendingUsersList.innerHTML = '<p>No pending registrations.</p>';
         } else {
@@ -355,8 +351,8 @@ async function showPendingUsers() {
         // Ambil approved users
         const approvedUsersList = document.getElementById('approvedUsersList');
         approvedUsersList.innerHTML = '';
-        const q = query(collection(db, 'users'), where('username', '!=', 'admin'));
-        const approvedSnapshot = await getDocs(q);
+        const q = db.collection('users').where('username', '!=', 'admin');
+        const approvedSnapshot = await q.get();
         if (approvedSnapshot.empty) {
             approvedUsersList.innerHTML = '<p>No approved users.</p>';
         } else {
@@ -383,24 +379,24 @@ async function showPendingUsers() {
 // Function to approve a pending user
 async function approveUser(pendingUserId) {
     try {
-        const pendingDoc = await getDoc(doc(db, 'pendingUsers', pendingUserId));
-        if (!pendingDoc.exists()) {
+        const pendingDoc = await db.collection('pendingUsers').doc(pendingUserId).get();
+        if (!pendingDoc.exists) {
             alert('User not found.');
             return;
         }
         const user = pendingDoc.data();
 
         // Tambahkan ke users
-        await addDoc(collection(db, 'users'), {
+        await db.collection('users').add({
             username: user.username,
             password: user.password,
             isAdmin: false,
             allowedTools: false,
-            createdAt: serverTimestamp()
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
         // Hapus dari pendingUsers
-        await deleteDoc(doc(db, 'pendingUsers', pendingUserId));
+        await db.collection('pendingUsers').doc(pendingUserId).delete();
         alert(`User ${user.username} has been approved!`);
         await showPendingUsers();
     } catch (error) {
@@ -412,13 +408,13 @@ async function approveUser(pendingUserId) {
 // Function to reject a pending user
 async function rejectUser(pendingUserId) {
     try {
-        const pendingDoc = await getDoc(doc(db, 'pendingUsers', pendingUserId));
-        if (!pendingDoc.exists()) {
+        const pendingDoc = await db.collection('pendingUsers').doc(pendingUserId).get();
+        if (!pendingDoc.exists) {
             alert('User not found.');
             return;
         }
         const user = pendingDoc.data();
-        await deleteDoc(doc(db, 'pendingUsers', pendingUserId));
+        await db.collection('pendingUsers').doc(pendingUserId).delete();
         alert(`User ${user.username} has been rejected.`);
         await showPendingUsers();
     } catch (error) {
@@ -430,7 +426,7 @@ async function rejectUser(pendingUserId) {
 // Function to toggle tools access for approved users
 async function toggleToolsAccess(userId, allow) {
     try {
-        await updateDoc(doc(db, 'users', userId), { allowedTools: allow });
+        await db.collection('users').doc(userId).update({ allowedTools: allow });
         if (currentUserData && userId === currentUserData.id) {
             currentUserData.allowedTools = allow;
             updateToolsFilterButton();
@@ -577,7 +573,7 @@ async function showUserProjects() {
     });
 }
 
-// Function to display public projects preview (visible to all)
+// Function to display public projects preview
 async function displayPublicProjectsPreview() {
     await loadProjects();
     const publicProjectsList = document.getElementById('publicProjectsList');
@@ -634,7 +630,7 @@ async function displayPublicProjectsPreview() {
     });
 }
 
-// Function to show public projects (for logged-in users)
+// Function to show public projects
 async function showPublicProjects() {
     await loadProjects();
     hideAllContainers();
@@ -726,10 +722,10 @@ async function addProject() {
                 status: "Not Started",
                 daysRunning: 0,
                 approvedByAdmin: false,
-                createdAt: serverTimestamp()
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
-            await addDoc(collection(db, 'projects'), newProject);
+            await db.collection('projects').add(newProject);
             alert('Project added successfully!');
             showProjects();
         } catch (error) {
@@ -790,7 +786,7 @@ async function updateProject() {
     }
 
     try {
-        const projectRef = doc(db, 'projects', editingProjectId);
+        const projectRef = db.collection('projects').doc(editingProjectId);
         const project = projects.find(p => p.id === editingProjectId);
 
         const updatedProject = {
@@ -805,20 +801,20 @@ async function updateProject() {
             addedBy: project.addedBy,
             daysRunning: projectStatus === "End" ? 0 : project.daysRunning,
             approvedByAdmin: project.approvedByAdmin,
-            updatedAt: serverTimestamp()
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
         if (projectImage) {
             const reader = new FileReader();
             reader.onloadend = async function () {
                 updatedProject.image = reader.result;
-                await updateDoc(projectRef, updatedProject);
+                await projectRef.update(updatedProject);
                 alert('Project updated successfully!');
                 showProjects();
             };
             reader.readAsDataURL(projectImage);
         } else {
-            await updateDoc(projectRef, updatedProject);
+            await projectRef.update(updatedProject);
             alert('Project updated successfully!');
             showProjects();
         }
@@ -832,7 +828,7 @@ async function updateProject() {
 async function deleteProject(projectId) {
     if (confirm('Are you sure you want to delete this project?')) {
         try {
-            await deleteDoc(doc(db, 'projects', projectId));
+            await db.collection('projects').doc(projectId).delete();
             alert('Project deleted successfully!');
             showProjects();
         } catch (error) {
@@ -845,7 +841,7 @@ async function deleteProject(projectId) {
 // Function to approve project for public (admin only)
 async function approveProjectForPublic(projectId) {
     try {
-        await updateDoc(doc(db, 'projects', projectId), { approvedByAdmin: true });
+        await db.collection('projects').doc(projectId).update({ approvedByAdmin: true });
         alert('Project has been approved for public!');
         showProjects();
     } catch (error) {
@@ -857,7 +853,7 @@ async function approveProjectForPublic(projectId) {
 // Function to revoke public approval (admin only)
 async function revokeProjectApproval(projectId) {
     try {
-        await updateDoc(doc(db, 'projects', projectId), { approvedByAdmin: false });
+        await db.collection('projects').doc(projectId).update({ approvedByAdmin: false });
         alert('Public approval for the project has been revoked!');
         showProjects();
     } catch (error) {
